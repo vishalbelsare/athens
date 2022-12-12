@@ -24,7 +24,8 @@ block = (thematic-break /
          indented-code-block /
          fenced-code-block /
          block-quote /
-         paragraph-text)*
+         paragraph-text /
+         newline)*
 thematic-break = #'[_-]{3}'
 heading = #'[#]+' <space> #'.+' <newline>*
 indented-code-block = (<'    '> code-text)+
@@ -52,11 +53,11 @@ inline = recur
            emphasis /
            highlight /
            strikethrough /
+           block-ref /
+           page-link /
            link /
            image /
            autolink /
-           block-ref /
-           page-link /
            hashtag-braced /
            hashtag-naked /
            component /
@@ -73,36 +74,37 @@ inline = recur
 (* closing `x` has: *)
 (* - `(?<!\\s)`: it can't be preceded by a white space *)
 (* - `(?!\\w)`: it can't be followed by a word character, when it can don't include it *)
+(* regex lookbehinds `?<!` don't work at the start of a token so we're not using them *)
    
-code-span = <#'(?<!\\w)`'>
-            #'(?s)([^`]|(?<=\\s)`(?=\\s))+'
+code-span = <#'`'>
+            #'(?s)([^`]|\\B`(?=\\s))+'
             <#'`(?!\\w)'>
 
-strong-emphasis = <#'(?<!\\w)\\*\\*(?!\\s)'>
+strong-emphasis = <#'\\*\\*(?!\\s)'>
                   recur
-                  <#'(?<!\\s)\\*\\*(?!\\w)'>
+                  <#'\\*\\*(?!\\w)'>
 
-emphasis = <#'(?<!\\w)\\*(?!\\s)'>
+emphasis = <#'\\*(?!\\s)'>
            recur
-           <#'(?<!\\s)\\*(?!\\w)'>
+           <#'\\*(?!\\w)'>
 
-highlight = <#'(?<!\\w)\\^\\^(?!\\s)'>
+highlight = <#'\\^\\^(?!\\s)'>
             recur
-            <#'(?<!\\s)\\^\\^(?!\\w)'>
+            <#'\\^\\^(?!\\w)'>
 
-strikethrough = <#'(?<!\\w)~~(?!\\s)'>
+strikethrough = <#'~~(?!\\s)'>
                 recur
-                <#'(?<!\\s)~~(?!\\w)'>
+                <#'~~(?!\\w)'>
 
 link = md-link
 image = <'!'> md-link
 
-<md-link> = <#'(?<!\\w)\\[(?!\\s)'>
+<md-link> = <#'\\[(?!\\s)'>
             link-text
-            <#'(?<!\\s)\\]\\((?!\\s)'>
+            <#'\\]\\((?!\\s)'>
             link-target
             (<' '> link-title)?
-            <#'(?<!\\s)\\)(?!\\w)'>
+            <#'\\)(?!\\w)'>
 
 link-text = #'([^\\]]|\\\\\\])*?(?=\\]\\()'
 link-target = ( #'[^\\s\\(\\)]+' | '(' #'[^\\s\\)]*' ')' | '\\\\' ( '(' | ')' ) | #'\\s(?![\"\\'\\(])' )+
@@ -110,43 +112,47 @@ link-title = <'\"'> #'[^\"]+' <'\"'>
            | <'\\''> #'[^\\']+' <'\\''>
            | <'('> #'[^\\)]+' <')'>
 
-autolink = <#'(?<!\\w)<(?!\\s)'>
+autolink = <#'<(?!\\s)'>
            #'[^>\\s]+'
-           <#'(?<!\\s)>(?!\\w)'>
+           <#'>(?!\\w)'>
 
-block-ref = <#'\\(\\((?!\\s)'>
+block-ref = title?
+            <#'\\(\\((?!\\s)'>
             #'.+?(?=\\)\\))'
-            <#'(?<!\\s)\\)\\)'>
+            <#'\\)\\)'>
 
-page-link = <#'(?<!\\w)\\[\\[(?!\\s)'>
+page-link = title?
+            <#'\\[\\[(?!\\s)'>
             (#'[^\\[\\]\\#\\n]+' | page-link | hashtag-naked | hashtag-braced)+
-            <#'(?<!\\s)\\]\\](?!\\w)'>
+            <#'\\]\\](?!\\w)'>
 
-hashtag-naked = <#'(?<!\\w)\\#(?!\\s)'>
+hashtag-naked = <#'\\#(?!\\s)'>
                 #'[^\\ \\+\\!\\@\\#\\$\\%\\^\\&\\*\\(\\)\\?\\\"\\;\\:\\]\\[]+(?!\\w)'
 
-hashtag-braced = <#'(?<!\\w)\\#\\[\\[(?!\\s)'>
+hashtag-braced = <#'\\#\\[\\[(?!\\s)'>
                  (#'[^\\[\\]\\#\\n]+' | page-link | hashtag-naked | hashtag-braced)+
-                 <#'(?<!\\s)\\]\\](?!\\w)'>
+                 <#'\\]\\](?!\\w)'>
 
-component = <#'(?<!\\w)\\{\\{(?!\\s)'>
+component = <#'\\{\\{(?!\\s)'>
             (page-link / block-ref / #'.+(?=\\}\\})')
-            <#'(?<!\\s)\\}\\}(?!\\w)'>
+            <#'\\}\\}(?!\\w)'>
 
-latex = <#'(?<!\\w)\\$\\$(?!\\s)'>
+title = <#'\\[(?!\\s)'>
+        #'([^\\]]|\\\\\\])+(?=\\])'
+        <#'\\](?!\\s)'>
+
+latex = <#'\\$\\$(?!\\s)'>
         #'(?s).+?(?=\\$\\$)'
-        <#'(?<!\\s)\\$\\$(?!\\w)'>
+        <#'\\$\\$(?!\\w)'>
 
 (* characters with meaning (special chars) *)
 (* every delimiter used as inline span boundary has to be added below *)
 
 (* anything but special chars *)
-text-run = #'(?:[^\\*`\\^~\\[!<\\(\\#\\$\\{\\r\\n]|(?<=\\S)[`!\\#\\$\\{])+'
+text-run = #'(?:[^\\*`\\^~\\[!<\\(\\#\\$\\{\\r\\n]|\\b[`!\\#\\$\\{])+'
 
 (* any special char *)
-<special-char> = #'(?<!\\w)[\\*`^~\\[!<\\(\\#\\$\\{]'
-
-<backtick> = #'(?<!`)`(?!`)'
+<special-char> = #'[\\*`^~\\[!<\\(\\#\\$\\{]'
 
 newline = #'\\n'
 ")
@@ -231,14 +237,30 @@ newline = #'\\n'
 
 (defn- block-ref-transform
   [& contents]
-  (apply conj [:block-ref {:from (str "((" (string/join contents) "))")}]
-         contents))
+  (let [title?   (= :title (ffirst contents))
+        title    (when title? (-> contents first second))
+        contents (if title?
+                   (drop 1 contents)
+                   contents)]
+    (apply conj [:block-ref (cond-> {:from (str (when title?
+                                                  (str "[" title "]"))
+                                                "((" (string/join contents) "))")}
+                              title? (assoc :title title))]
+           contents)))
 
 
 (defn- page-link-transform
   [& contents]
-  (apply conj [:page-link {:from (str "[[" (apply string-representation contents) "]]")}]
-         contents))
+  (let [title?   (= :title (ffirst contents))
+        title    (when title? (-> contents first second))
+        contents (if title?
+                   (drop 1 contents)
+                   contents)]
+    (apply conj [:page-link (cond-> {:from (str (when title?
+                                                  (str "[" title "]"))
+                                                "[[" (apply string-representation contents) "]]")}
+                              title? (assoc :title title))]
+           contents)))
 
 
 (defn- hashtag-braced-transform

@@ -50,9 +50,8 @@
                                             :block/order    4
                                             :block/children []}]}]]
         (fixture/transact-with-middleware setup-tx)
-        (let [block-move-op  (atomic-ops/make-block-move-op child-4-uid {:block/uid child-2-uid :relation :before})
-              block-move-txs (atomic-resolver/resolve-atomic-op-to-tx @@fixture/connection block-move-op)]
-          (d/transact! @fixture/connection block-move-txs)
+        (let [block-move-op (atomic-ops/make-block-move-op child-4-uid {:block/uid child-2-uid :relation :before})]
+          (atomic-resolver/resolve-transact! @fixture/connection block-move-op false)
           (let [child-1-block (common-db/get-block @@fixture/connection
                                                    [:block/uid child-1-uid])
                 child-2-block (common-db/get-block @@fixture/connection
@@ -101,9 +100,8 @@
                                             :block/order    4
                                             :block/children []}]}]]
         (fixture/transact-with-middleware setup-tx)
-        (let [block-move-op  (atomic-ops/make-block-move-op child-4-uid {:block/uid child-1-uid :relation :after})
-              block-move-txs (atomic-resolver/resolve-atomic-op-to-tx @@fixture/connection block-move-op)]
-          (d/transact! @fixture/connection block-move-txs)
+        (let [block-move-op (atomic-ops/make-block-move-op child-4-uid {:block/uid child-1-uid :relation :after})]
+          (atomic-resolver/resolve-transact! @fixture/connection block-move-op false)
           (let [child-1-block (common-db/get-block @@fixture/connection
                                                    [:block/uid child-1-uid])
                 child-2-block (common-db/get-block @@fixture/connection
@@ -153,9 +151,8 @@
                                             :block/order    4
                                             :block/children []}]}]]
         (fixture/transact-with-middleware setup-tx)
-        (let [block-move-op  (atomic-ops/make-block-move-op child-2-uid {:block/uid child-4-uid :relation :after})
-              block-move-txs (atomic-resolver/resolve-atomic-op-to-tx @@fixture/connection block-move-op)]
-          (d/transact! @fixture/connection block-move-txs)
+        (let [block-move-op (atomic-ops/make-block-move-op child-2-uid {:block/uid child-4-uid :relation :after})]
+          (atomic-resolver/resolve-transact! @fixture/connection block-move-op false)
           (let [child-1-block (common-db/get-block @@fixture/connection
                                                    [:block/uid child-1-uid])
                 child-2-block (common-db/get-block @@fixture/connection
@@ -204,9 +201,8 @@
                                             :block/order    4
                                             :block/children []}]}]]
         (fixture/transact-with-middleware setup-tx)
-        (let [block-move-op  (atomic-ops/make-block-move-op child-2-uid {:block/uid child-5-uid :relation :before})
-              block-move-txs (atomic-resolver/resolve-atomic-op-to-tx @@fixture/connection block-move-op)]
-          (d/transact! @fixture/connection block-move-txs)
+        (let [block-move-op (atomic-ops/make-block-move-op child-2-uid {:block/uid child-5-uid :relation :before})]
+          (atomic-resolver/resolve-transact! @fixture/connection block-move-op false)
           (let [child-1-block (common-db/get-block @@fixture/connection
                                                    [:block/uid child-1-uid])
                 child-2-block (common-db/get-block @@fixture/connection
@@ -256,9 +252,8 @@
                                             :block/children []}]}]]
       (fixture/transact-with-middleware setup-tx)
       ;; from:
-      (let [block-move-op  (atomic-ops/make-block-move-op child-2-2-uid {:block/uid child-1-1-uid :relation :before})
-            block-move-txs (atomic-resolver/resolve-atomic-op-to-tx @@fixture/connection block-move-op)]
-        (d/transact! @fixture/connection block-move-txs)
+      (let [block-move-op (atomic-ops/make-block-move-op child-2-2-uid {:block/uid child-1-1-uid :relation :before})]
+        (atomic-resolver/resolve-transact! @fixture/connection block-move-op false)
         (let [child-1-1-block (common-db/get-block @@fixture/connection
                                                    [:block/uid child-1-1-uid])
               child-1-2-block (common-db/get-block @@fixture/connection
@@ -291,9 +286,8 @@
                                             :block/order    1
                                             :block/children []}]}]]
       (fixture/transact-with-middleware setup-tx)
-      (let [block-move-op  (atomic-ops/make-block-move-op child-1-2-uid {:block/uid child-1-1-uid :relation :first})
-            block-move-txs (atomic-resolver/resolve-atomic-op-to-tx @@fixture/connection block-move-op)]
-        (d/transact! @fixture/connection block-move-txs)
+      (let [block-move-op  (atomic-ops/make-block-move-op child-1-2-uid {:block/uid child-1-1-uid :relation :first})]
+        (atomic-resolver/resolve-transact! @fixture/connection block-move-op false)
         (let [parent-block    (common-db/get-block @@fixture/connection
                                                    [:block/uid parent-1-uid])
               child-1-1-block (common-db/get-block @@fixture/connection
@@ -331,10 +325,7 @@
       (let [chained-move (composite-ops/make-consequence-op {:op/type :block/move-chained}
                                                             [(atomic-ops/make-block-move-op child-2-uid {:block/uid child-1-uid :relation :first})
                                                              (atomic-ops/make-block-move-op child-3-uid {:block/uid child-2-uid :relation :after})])]
-        ;; in real usage use `resolve-transact!`, here we have to emulate it so we don't use middleware
-        (doseq [atomic (graph-ops/extract-atomics chained-move)
-                :let   [atomic-txs (atomic-resolver/resolve-to-tx @@fixture/connection atomic)]]
-          (d/transact! @fixture/connection atomic-txs))
+        (atomic-resolver/resolve-transact! @fixture/connection chained-move false)
         (let [parent-block  (common-db/get-block @@fixture/connection
                                                  [:block/uid parent-1-uid])
               child-1-block (common-db/get-block @@fixture/connection
@@ -377,10 +368,7 @@
       (let [chained-move (composite-ops/make-consequence-op {:op/type :block/move-chained}
                                                             [(atomic-ops/make-block-move-op child-2-uid {:block/uid child-1-uid :relation :first})
                                                              (atomic-ops/make-block-move-op child-3-uid {:block/uid child-2-uid :relation :after})])]
-        ;; in real usage use `resolve-transact!`, here we have to emulate it so we don't use middleware
-        (doseq [atomic (graph-ops/extract-atomics chained-move)
-                :let   [atomic-txs (atomic-resolver/resolve-to-tx @@fixture/connection atomic)]]
-          (d/transact! @fixture/connection atomic-txs))
+        (atomic-resolver/resolve-transact! @fixture/connection chained-move false)
         (let [parent-block  (common-db/get-block @@fixture/connection
                                                  [:block/uid parent-1-uid])
               child-1-block (common-db/get-block @@fixture/connection
@@ -424,12 +412,7 @@
       (let [chained-move (composite-ops/make-consequence-op {:op/type :block/move-chained}
                                                             [(atomic-ops/make-block-move-op child-2-uid {:block/uid child-4-uid :relation :after})
                                                              (atomic-ops/make-block-move-op child-3-uid {:block/uid child-2-uid :relation :after})])]
-        ;; in real usage use `resolve-transact!`, here we have to emulate it so we don't use middleware
-        (doseq [atomic (graph-ops/extract-atomics chained-move)
-                :let   [atomic-txs (atomic-resolver/resolve-to-tx @@fixture/connection atomic)]]
-          (log/debug "weird tx:\n" (with-out-str
-                                     (pp/pprint atomic-txs)))
-          (d/transact! @fixture/connection atomic-txs))
+        (atomic-resolver/resolve-transact! @fixture/connection chained-move false)
         (let [parent-block  (common-db/get-block @@fixture/connection
                                                  [:block/uid parent-1-uid])
               child-1-block (common-db/get-block @@fixture/connection
@@ -479,12 +462,7 @@
       (let [chained-move (composite-ops/make-consequence-op {:op/type :block/move-chained}
                                                             [(atomic-ops/make-block-move-op child-2-uid {:block/uid child-5-uid :relation :after})
                                                              (atomic-ops/make-block-move-op child-3-uid {:block/uid child-2-uid :relation :after})])]
-        ;; in real usage use `resolve-transact!`, here we have to emulate it so we don't use middleware
-        (doseq [atomic (graph-ops/extract-atomics chained-move)
-                :let   [atomic-txs (atomic-resolver/resolve-to-tx @@fixture/connection atomic)]]
-          (log/debug "weird tx:\n" (with-out-str
-                                     (pp/pprint atomic-txs)))
-          (d/transact! @fixture/connection atomic-txs))
+        (atomic-resolver/resolve-transact! @fixture/connection chained-move false)
         (let [parent-block  (common-db/get-block @@fixture/connection
                                                  [:block/uid parent-1-uid])
               child-1-block (common-db/get-block @@fixture/connection
@@ -505,3 +483,290 @@
           (t/is (= 0 (:block/order child-5-block)))
           (t/is (= 1 (:block/order child-2-block)))
           (t/is (= 2 (:block/order child-3-block))))))))
+
+
+(t/deftest block-move-under-page
+  (let [block-0-uid     "block-0-uid"
+        block-1-uid     "block-1-uid"
+        block-2-uid     "block-2-uid"
+        child-1-1-uid   "child-1-1-uid"
+        child-2-1-uid   "child-2-1-uid"
+        setup-repr     [{:page/title     "test-page"
+                         :block/children [{:block/uid    block-0-uid
+                                           :block/string "zero"
+                                           :block/order  0}
+                                          {:block/uid    block-1-uid
+                                           :block/string "one"
+                                           :block/order  1
+                                           :block/children [{:block/uid      child-1-1-uid
+                                                             :block/string   ""
+                                                             :block/order    0
+                                                             :block/children []}]}
+                                          {:block/uid    block-2-uid
+                                           :block/string "two"
+                                           :block/order  2
+                                           :block/children [{:block/uid      child-2-1-uid
+                                                             :block/string   ""
+                                                             :block/order    0
+                                                             :block/children []}]}]}]
+        get-block-order    #(->> [:block/uid %]
+                                 (common-db/get-block @@fixture/connection)
+                                 :block/order)
+        move!              #(-> (atomic-ops/make-block-move-op %1 {:relation %2
+                                                                   :page/title %3})
+                                fixture/op-resolve-transact!)]
+
+    (t/testing "Block move under a page: Move source block :after target block, when both source and target block are under **same** parent"
+      (fixture/setup! setup-repr)
+      (t/is (= 0 (get-block-order block-0-uid)) "Move block 0 after block 1")
+      (t/is (= 1 (get-block-order block-1-uid)) "Move block 0 after block 1")
+      (move! block-1-uid :first "test-page")
+      (clojure.pprint/pprint (common-db/get-block @@fixture/connection [:node/title "test-page"]))
+      (t/is (= 1 (get-block-order block-0-uid)) "Move source uid (block-0-uid) after target uid (block-1-uid)")
+      (t/is (= 0 (get-block-order block-1-uid)) "Move source uid (block-0-uid) after target uid (block-1-uid)")
+      (fixture/teardown! setup-repr))))
+
+
+(t/deftest undo
+  (let [block-0-uid     "block-0-uid"
+        block-1-uid     "block-1-uid"
+        block-2-uid     "block-2-uid"
+        child-1-1-uid   "child-1-1-uid"
+        child-2-1-uid   "child-2-1-uid"
+        setup-repr     [{:page/title     "test-page"
+                         :block/children [{:block/uid    block-0-uid
+                                           :block/string "zero"
+                                           :block/order  0}
+                                          {:block/uid    block-1-uid
+                                           :block/string "one"
+                                           :block/order  1
+                                           :block/children [{:block/uid      child-1-1-uid
+                                                             :block/string   ""
+                                                             :block/order    0
+                                                             :block/children []}]}
+                                          {:block/uid    block-2-uid
+                                           :block/string "two"
+                                           :block/order  2
+                                           :block/children [{:block/uid      child-2-1-uid
+                                                             :block/string   ""
+                                                             :block/order    0
+                                                             :block/children []}]}]}]
+        get-block-order    #(->> [:block/uid %]
+                                 (common-db/get-block @@fixture/connection)
+                                 :block/order)
+        get-children-count #(->> [:block/uid %]
+                                 (common-db/get-block @@fixture/connection)
+                                 :block/children
+                                 count)
+        move!              #(-> (atomic-ops/make-block-move-op %1 {:relation %2
+                                                                   :block/uid %3})
+                                fixture/op-resolve-transact!)]
+
+    (t/testing "Undo Block move: Move source block :after target block, when both source and target block are under **same** parent"
+      (fixture/setup! setup-repr)
+      (t/is (= 1 (get-block-order block-1-uid)) "Move block 1 after block 2")
+      (t/is (= 2 (get-block-order block-2-uid)) "Move block 1 after block 2")
+      (let [[evt-db evt] (move! block-1-uid :after block-2-uid)]
+        (t/is (= 2 (get-block-order block-1-uid)) "Move source uid (block-1-uid) after target uid (block-2-uid)")
+        (t/is (= 1 (get-block-order block-2-uid)) "Move source uid (block-1-uid) after target uid (block-2-uid)")
+        (fixture/undo! evt-db evt)
+        (t/is (= 1 (get-block-order block-1-uid)) "Undo: Move source uid (block-1-uid) and target uid (block-2-uid) to original position ")
+        (t/is (= 2 (get-block-order block-2-uid))  "Undo: Move source uid (block-1-uid) and target uid (block-2-uid) to original position "))
+      (fixture/teardown! setup-repr))
+
+    (t/testing "Redo Block move: Move source block :after target block, when both source and target block are under **same** parent"
+      (fixture/setup! setup-repr)
+      (t/is (= 1 (get-block-order block-1-uid)) "Move block 1 after block 2")
+      (t/is (= 2 (get-block-order block-2-uid)) "Move block 1 after block 2")
+      (let [[evt-db evt] (move! block-1-uid :after block-2-uid)]
+        (t/is (= 2 (get-block-order block-1-uid)) "Move source uid (block-1-uid) after target uid (block-2-uid)")
+        (t/is (= 1 (get-block-order block-2-uid)) "Move source uid (block-1-uid) after target uid (block-2-uid)")
+        (let [[evt-db' evt']  (fixture/undo! evt-db evt)]
+          (t/is (= 1 (get-block-order block-1-uid)) "Undo: Move source uid (block-1-uid) and target uid (block-2-uid) to original position ")
+          (t/is (= 2 (get-block-order block-2-uid))  "Undo: Move source uid (block-1-uid) and target uid (block-2-uid) to original position ")
+          (fixture/undo! evt-db' evt')
+          (t/is (= 2 (get-block-order block-1-uid)) "Move block 1 after block 2")
+          (t/is (= 1 (get-block-order block-2-uid)) "Move block 1 after block 2")))
+      (fixture/teardown! setup-repr))
+
+    (t/testing "Undo: Block move under a page: Move source block :after target block, when both source and target block are under **same** parent"
+      (fixture/setup! setup-repr)
+      (t/is (= 0 (get-block-order block-0-uid)) "Move block 0 after block 1")
+      (t/is (= 1 (get-block-order block-1-uid)) "Move block 0 after block 1")
+      (let [[evt-db evt] (move! block-0-uid :after block-1-uid)]
+        (t/is (= 1 (get-block-order block-0-uid)) "Move source uid (block-0-uid) after target uid (block-1-uid)")
+        (t/is (= 0 (get-block-order block-1-uid)) "Move source uid (block-0-uid) after target uid (block-1-uid)")
+        (fixture/undo! evt-db evt)
+        (t/is (= 0 (get-block-order block-0-uid)) "Undo: Move source uid (block-0-uid) and target uid (block-1-uid) to original position ")
+        (t/is (= 1 (get-block-order block-1-uid))  "Undo: Move source uid (block-0-uid) and target uid (block-1-uid) to original position "))
+      (fixture/teardown! setup-repr))
+
+    (t/testing "Redo: Block move under a page: Move source block :after target block, when both source and target block are under **same** parent"
+      (fixture/setup! setup-repr)
+      (t/is (= 0 (get-block-order block-0-uid)) "Move block 0 after block 1")
+      (t/is (= 1 (get-block-order block-1-uid)) "Move block 0 after block 1")
+      (let [[evt-db evt] (move! block-0-uid :after block-1-uid)]
+        (t/is (= 1 (get-block-order block-0-uid)) "Move source uid (block-0-uid) after target uid (block-1-uid)")
+        (t/is (= 0 (get-block-order block-1-uid)) "Move source uid (block-0-uid) after target uid (block-1-uid)")
+        (let [[evt-db' evt']  (fixture/undo! evt-db evt)]
+          (t/is (= 0 (get-block-order block-0-uid)) "Undo: Move source uid (block-0-uid) and target uid (block-1-uid) to original position ")
+          (t/is (= 1 (get-block-order block-1-uid))  "Undo: Move source uid (block-0-uid) and target uid (block-1-uid) to original position ")
+          (fixture/undo! evt-db' evt')
+          (t/is (= 1 (get-block-order block-0-uid)) "Move source uid (block-0-uid) after target uid (block-1-uid)")
+          (t/is (= 0 (get-block-order block-1-uid))) "Move source uid (block-0-uid) after target uid (block-1-uid)"))
+      (fixture/teardown! setup-repr))
+
+    (t/testing "Undo move: Move source block :before target block, when both source and target block are under **same** parent"
+      (fixture/setup! setup-repr)
+      (t/is (= 0 (get-block-order block-0-uid)) "Move block 1 :before block 0")
+      (t/is (= 1 (get-block-order block-1-uid)) "Move block 1 :before block 0")
+      (let [[evt-db evt] (move! block-1-uid :before block-0-uid)]
+        (t/is (= 1 (get-block-order block-0-uid)) "Move source uid (block-1-uid) :before target uid (block-0-uid)")
+        (t/is (= 0 (get-block-order block-1-uid)) "Move source uid (block-1-uid) :before target uid (block-0-uid)")
+        (fixture/undo! evt-db evt)
+        (t/is (= 0 (get-block-order block-0-uid)) "Undo: Move source uid (block-1-uid) and target uid (block-0-uid) to original position ")
+        (t/is (= 1 (get-block-order block-1-uid)) "Undo: Move source uid (block-1-uid) and target uid (block-0-uid) to original position "))
+      (fixture/teardown! setup-repr))
+
+    (t/testing "Redo move: Move source block :before target block, when both source and target block are under **same** parent"
+      (fixture/setup! setup-repr)
+      (t/is (= 0 (get-block-order block-0-uid)) "Move block 1 :before block 0")
+      (t/is (= 1 (get-block-order block-1-uid)) "Move block 1 :before block 0")
+      (let [[evt-db evt] (move! block-1-uid :before block-0-uid)]
+        (t/is (= 1 (get-block-order block-0-uid)) "Move source uid (block-1-uid) :before target uid (block-0-uid)")
+        (t/is (= 0 (get-block-order block-1-uid)) "Move source uid (block-1-uid) :before target uid (block-0-uid)")
+        (let [[evt-db' evt'] (fixture/undo! evt-db evt)]
+          (t/is (= 0 (get-block-order block-0-uid)) "Undo: Move source uid (block-1-uid) and target uid (block-0-uid) to original position ")
+          (t/is (= 1 (get-block-order block-1-uid)) "Undo: Move source uid (block-1-uid) and target uid (block-0-uid) to original position ")
+          (fixture/undo! evt-db' evt')
+          (t/is (= 1 (get-block-order block-0-uid)) "Move source uid (block-1-uid) :before target uid (block-0-uid)")
+          (t/is (= 0 (get-block-order block-1-uid)) "Move source uid (block-1-uid) :before target uid (block-0-uid)")))
+      (fixture/teardown! setup-repr))
+
+    (t/testing "Undo move: Move source block :after target block, when both source and target block are under **Different** parent"
+      (fixture/setup! setup-repr)
+      (t/is (= 0 (get-block-order child-1-1-uid)) "Move child-1-1 :after child-2-1")
+      (t/is (= 1 (get-children-count block-1-uid)) "Block 1 should have 1 child")
+      (t/is (= 0 (get-block-order child-2-1-uid)) "Move child-1-1 :after child-2-1")
+      (t/is (= 1 (get-children-count block-2-uid)) "Block 2 should have 1 child")
+      (let [[evt-db evt] (move! child-1-1-uid :after child-2-1-uid)]
+        (t/is (= 1 (get-block-order child-1-1-uid)) "Move source uid (child-1-1-uid) :after target uid (child-2-1-uid)")
+        (t/is (= 0 (get-children-count block-1-uid)) "Block 1 should have 0 child")
+        (t/is (= 0 (get-block-order child-2-1-uid)) "Move source uid (child-1-1-uid) :after target uid (child-2-1-uid)")
+        (t/is (= 2 (get-children-count block-2-uid)) "Block 2 should have 2 child")
+        (fixture/undo! evt-db evt)
+        (t/is (= 0 (get-block-order child-1-1-uid)) "Undo: Move source uid (block-1-uid) and target uid (block-0-uid) to original position ")
+        (t/is (= 1 (get-children-count block-1-uid)) "Block 1 should have 1 child")
+        (t/is (= 0 (get-block-order child-2-1-uid)) "Undo: Move source uid (block-1-uid) and target uid (block-0-uid) to original position ")
+        (t/is (= 1 (get-children-count block-2-uid)) "Block 2 should have 1 child"))
+      (fixture/teardown! setup-repr))
+
+    (t/testing "Redo move: Move source block :after target block, when both source and target block are under **Different** parent"
+      (fixture/setup! setup-repr)
+      (t/is (= 0 (get-block-order child-1-1-uid)) "Move child-1-1 :after child-2-1")
+      (t/is (= 1 (get-children-count block-1-uid)) "Block 1 should have 1 child")
+      (t/is (= 0 (get-block-order child-2-1-uid)) "Move child-1-1 :after child-2-1")
+      (t/is (= 1 (get-children-count block-2-uid)) "Block 2 should have 1 child")
+      (let [[evt-db evt] (move! child-1-1-uid :after child-2-1-uid)]
+        (t/is (= 1 (get-block-order child-1-1-uid)) "Move source uid (child-1-1-uid) :after target uid (child-2-1-uid)")
+        (t/is (= 0 (get-children-count block-1-uid)) "Block 1 should have 0 child")
+        (t/is (= 0 (get-block-order child-2-1-uid)) "Move source uid (child-1-1-uid) :after target uid (child-2-1-uid)")
+        (t/is (= 2 (get-children-count block-2-uid)) "Block 2 should have 2 child")
+        (let [[evt-db' evt'] (fixture/undo! evt-db evt)]
+          (t/is (= 0 (get-block-order child-1-1-uid)) "Undo: Move source uid (block-1-uid) and target uid (block-0-uid) to original position ")
+          (t/is (= 1 (get-children-count block-1-uid)) "Block 1 should have 1 child")
+          (t/is (= 0 (get-block-order child-2-1-uid)) "Undo: Move source uid (block-1-uid) and target uid (block-0-uid) to original position ")
+          (t/is (= 1 (get-children-count block-2-uid)) "Block 2 should have 1 child")
+          (fixture/undo! evt-db' evt')
+          (t/is (= 1 (get-block-order child-1-1-uid)) "Move source uid (child-1-1-uid) :after target uid (child-2-1-uid)")
+          (t/is (= 0 (get-children-count block-1-uid)) "Block 1 should have 0 child")
+          (t/is (= 0 (get-block-order child-2-1-uid)) "Move source uid (child-1-1-uid) :after target uid (child-2-1-uid)")
+          (t/is (= 2 (get-children-count block-2-uid))) "Block 2 should have 2 child"))
+      (fixture/teardown! setup-repr))
+
+    (t/testing "Undo move: Move source block :before target block, when both source and target block are under **Different** parent"
+      (fixture/setup! setup-repr)
+      (t/is (= 0 (get-block-order child-1-1-uid)) "Move child-1-1 :before child-2-1")
+      (t/is (= 1 (get-children-count block-1-uid)) "Block 1 should have 1 child")
+      (t/is (= 0 (get-block-order child-2-1-uid)) "Move child-1-1 :before child-2-1")
+      (t/is (= 1 (get-children-count block-2-uid)) "Block 2 should have 1 child")
+      (let [[evt-db evt] (move! child-1-1-uid :before child-2-1-uid)]
+        (t/is (= 0 (get-block-order child-1-1-uid)) "Move source uid (child-1-1-uid) :before target uid (child-2-1-uid)")
+        (t/is (= 0 (get-children-count block-1-uid)) "Block 1 should have 0 child")
+        (t/is (= 1 (get-block-order child-2-1-uid)) "Move source uid (child-1-1-uid) :before target uid (child-2-1-uid)")
+        (t/is (= 2 (get-children-count block-2-uid)) "Block 2 should have 2 child")
+        (fixture/undo! evt-db evt)
+        (t/is (= 0 (get-block-order child-1-1-uid)) "Undo: Move source uid (block-1-uid) and target uid (block-0-uid) to original position ")
+        (t/is (= 1 (get-children-count block-1-uid)) "Block 1 should have 1 child")
+        (t/is (= 0 (get-block-order child-2-1-uid)) "Undo: Move source uid (block-1-uid) and target uid (block-0-uid) to original position ")
+        (t/is (= 1 (get-children-count block-2-uid)) "Block 2 should have 1 child"))
+      (fixture/teardown! setup-repr))
+
+    (t/testing "Redo move: Move source block :before target block, when both source and target block are under **Different** parent"
+      (fixture/setup! setup-repr)
+      (t/is (= 0 (get-block-order child-1-1-uid)) "Move child-1-1 :before child-2-1")
+      (t/is (= 1 (get-children-count block-1-uid)) "Block 1 should have 1 child")
+      (t/is (= 0 (get-block-order child-2-1-uid)) "Move child-1-1 :before child-2-1")
+      (t/is (= 1 (get-children-count block-2-uid)) "Block 2 should have 1 child")
+      (let [[evt-db evt] (move! child-1-1-uid :before child-2-1-uid)]
+        (t/is (= 0 (get-block-order child-1-1-uid)) "Move source uid (child-1-1-uid) :before target uid (child-2-1-uid)")
+        (t/is (= 0 (get-children-count block-1-uid)) "Block 1 should have 0 child")
+        (t/is (= 1 (get-block-order child-2-1-uid)) "Move source uid (child-1-1-uid) :before target uid (child-2-1-uid)")
+        (t/is (= 2 (get-children-count block-2-uid)) "Block 2 should have 2 child")
+        (let [[evt-db' evt'] (fixture/undo! evt-db evt)]
+          (t/is (= 0 (get-block-order child-1-1-uid)) "Undo: Move source uid (block-1-uid) and target uid (block-0-uid) to original position ")
+          (t/is (= 1 (get-children-count block-1-uid)) "Block 1 should have 1 child")
+          (t/is (= 0 (get-block-order child-2-1-uid)) "Undo: Move source uid (block-1-uid) and target uid (block-0-uid) to original position ")
+          (t/is (= 1 (get-children-count block-2-uid)) "Block 2 should have 1 child")
+          (fixture/undo! evt-db' evt')
+          (t/is (= 0 (get-block-order child-1-1-uid)) "Move source uid (child-1-1-uid) :before target uid (child-2-1-uid)")
+          (t/is (= 0 (get-children-count block-1-uid)) "Block 1 should have 0 child")
+          (t/is (= 1 (get-block-order child-2-1-uid)) "Move source uid (child-1-1-uid) :before target uid (child-2-1-uid)")
+          (t/is (= 2 (get-children-count block-2-uid))) "Block 2 should have 2 child"))
+      (fixture/teardown! setup-repr))))
+
+
+(t/deftest child-to-prop
+  (fixture/setup! [{:page/title "title"
+                    :block/children
+                    [#:block{:uid    "uid"
+                             :string ""}]}])
+  (fixture/op-resolve-transact!
+    (graph-ops/build-block-move-op @@fixture/connection "uid" {:page/title "title"
+                                                               :relation   {:page/title "key"}}))
+  (fixture/is #{{:page/title "key"}
+                {:page/title "title"
+                 :block/properties
+                 {"key" #:block{:uid    "uid"
+                                :string ""}}}}))
+
+
+(t/deftest prop-to-child
+  (fixture/setup! [{:page/title "title"
+                    :block/properties
+                    {"key" #:block{:uid    "uid"
+                                   :string ""}}}])
+  (fixture/op-resolve-transact!
+    (graph-ops/build-block-move-op @@fixture/connection "uid" {:page/title "title"
+                                                               :relation   :first}))
+  (fixture/is #{{:page/title "key"}
+                {:page/title "title"
+                 :block/children
+                 [#:block{:uid    "uid"
+                          :string ""}]}}))
+
+
+(t/deftest prop-to-prop
+  (fixture/setup! [{:page/title "title"
+                    :block/properties
+                    {"key" #:block{:uid    "uid"
+                                   :string ""}}}])
+  (fixture/op-resolve-transact!
+    (graph-ops/build-block-move-op @@fixture/connection "uid" {:page/title "title"
+                                                               :relation   {:page/title "key2"}}))
+  (fixture/is #{{:page/title "key"}
+                {:page/title "key2"}
+                {:page/title "title"
+                 :block/properties
+                 {"key2" #:block{:uid    "uid"
+                                 :string ""}}}}))

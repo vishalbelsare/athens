@@ -10,6 +10,7 @@
     [athens.db :refer [dsdb]]
     [athens.effects]
     [athens.electron.core]
+    [athens.electron.utils :as electron.utils]
     [athens.events]
     [athens.interceptors]
     [athens.listeners :as listeners]
@@ -18,9 +19,8 @@
     [athens.subs]
     [athens.util :as util]
     [athens.views :as views]
-    [cljs.reader :refer [read-string]]
+    [datalog-console.integrations.datascript :as datalog-console]
     [goog.dom :refer [getElement]]
-    [goog.object :as gobj]
     [re-frame.core :as rf]
     [reagent.dom :as r-dom]))
 
@@ -35,9 +35,10 @@
 
 
 (defn ^:dev/after-load mount-root
-  []
+  [first-boot?]
   (rf/clear-subscription-cache!)
-  (router/init-routes!)
+  (when-not first-boot?
+    (router/init-routes!))
   (r-dom/render [views/main]
                 (getElement "app")))
 
@@ -52,13 +53,13 @@
   "Two checks for sentry: once on init and once on beforeSend."
   []
   (when (sentry-on?)
-    (.init Sentry (clj->js {:dsn SENTRY_DSN
+    (.init Sentry (clj->js {:dsn              SENTRY_DSN
                             :release          (str "athens@" (util/athens-version))
-                            :integrations     [(new (.. tracing -Integrations -BrowserTracing))
-                                               (new (.. integrations -CaptureConsole)
-                                                    (clj->js {:levels ["error" "assert"]}))
-                                               (new (.. integrations -ReportingObserver)
-                                                    (clj->js {:types ["crash"]}))]
+                            :integrations     [(tracing/Integrations.BrowserTracing.)
+                                               (Sentry/Integrations.Breadcrumbs. (clj->js {:console false}))
+                                               ;; NOTE This configuration is not working, we're not capturing these levels
+                                               (integrations/CaptureConsole. (clj->js {:levels ["warn" "error" "assert"]}))
+                                               (integrations/ReportingObserver. (clj->js {:types ["crash"]}))]
                             :environment      (if config/debug? "development" "production")
                             :beforeSend       #(when (sentry-on?) %)
                             :tracesSampleRate 1.0}))))
@@ -74,47 +75,17 @@
 
 (defn init-ipcRenderer
   []
-  (when (util/electron?)
-    (let [ipcRenderer       (.. (js/require "electron") -ipcRenderer)
-          update-available? (.sendSync ipcRenderer "check-update" "renderer")]
+  (when electron.utils/electron?
+    (let [update-available? (.sendSync (electron.utils/ipcRenderer) "check-update" "renderer")]
       (when update-available?
         (when (js/window.confirm "Update available. Would you like to update and restart to the latest version?")
-          (.sendSync ipcRenderer "confirm-update"))))))
-
-
-(defn init-datalog-console
-  []
-  (js/document.documentElement.setAttribute "__datalog-console-remote-installed__" true)
-  (let [conn dsdb]
-    (.addEventListener js/window "message"
-                       (fn [event]
-                         (when-let [devtool-message (gobj/getValueByKeys event "data" ":datalog-console.client/devtool-message")]
-                           (let [msg-type (:type (read-string devtool-message))]
-                             (case msg-type
-
-                               :datalog-console.client/request-whole-database-as-string
-                               (.postMessage js/window #js {":datalog-console.remote/remote-message" (pr-str @conn)} "*")
-
-                               nil)))))))
+          (.sendSync (electron.utils/ipcRenderer) "confirm-update"))))))
 
 
 (defn init-styles
   []
   (util/add-body-classes (util/app-classes {:os        (util/get-os)
-                                            :electron? (util/electron?)})))
-
-
-(defn boot-evts
-  []
-  (if (util/electron?)
-    [:boot/desktop]
-    [:boot/web]))
-
-
-(rf/reg-event-fx
-  :boot
-  (fn [_ _]
-    {:dispatch (boot-evts)}))
+                                            :electron? electron.utils/electron?})))
 
 
 (defn init
@@ -125,7 +96,8 @@
   (style/init)
   (init-styles)
   (listeners/init)
-  (init-datalog-console)
-  (rf/dispatch-sync (boot-evts))
+  (when config/debug?
+    (datalog-console/enable! {:conn dsdb}))
+  (rf/dispatch-sync [:boot true])
   (dev-setup)
-  (mount-root))
+  (mount-root true))

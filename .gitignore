@@ -4,6 +4,7 @@
 /target/
 /*-init.clj
 /*.log
+repl-client-debug
 
 # Leiningen
 /.lein-*
@@ -14,7 +15,10 @@
 
 # shadow-cljs cache, port files
 /.shadow-cljs/
+
+# Intelli-j files
 .idea/
+athens.iml
 
 # local caches
 .clj-kondo/.cache
@@ -34,8 +38,7 @@
 # electron build
 dist
 
-# design system static build
-/storybook-static
+# design system output
 /src/gen
 
 # docker compose templating backup
@@ -44,3 +47,15 @@ docker-compose.yml.bk
 # dev mode server data
 athens-data/*
 !athens-data/README.md
+
+# java AOT classes
+classes/*
+!classes/README.md
+
+# vercel static site deployment
+vercel-static/*
+!vercel-static/index.html
+!vercel-state/athens/.gitignore
+.vercel
+vercel-release/*
+!vercel-release/package.json

@@ -4,36 +4,36 @@
     [athens.common-db            :as common-db]
     [athens.common-events.schema :as schema]
     [athens.common.logging       :as log]
+    [athens.common.sentry        :refer-macros [wrap-span-no-new-tx]]
     [athens.db                   :as db]
+    [athens.reactive             :as reactive]
     [athens.self-hosted.client   :as client]
     [cljs-http.client            :as http]
     [cljs.core.async             :refer [go <!]]
     [cljs.core.async.interop     :refer [<p!]]
     [com.stuartsierra.component  :as component]
-    [datascript.core             :as d]
     [day8.re-frame.async-flow-fx]
     [goog.dom.selection          :refer [setCursorPosition]]
     [malli.core                  :as m]
     [malli.error                 :as me]
-    [re-frame.core               :as rf]
-    [stylefy.core                :as stylefy]))
+    [re-frame.core               :as rf]))
 
 
 ;; Effects
 
-
-;; TODO: remove this effect when :transact is removed.
-(rf/reg-fx
-  :transact!
-  (fn [tx-data]
-    (common-db/transact-with-middleware! db/dsdb tx-data)))
-
-
 (rf/reg-fx
   :reset-conn!
-  (fn [new-db]
-    (d/reset-conn! db/dsdb new-db)
-    (common-db/health-check db/dsdb)))
+  (fn [[new-db skip-health-check?]]
+    ;; Remove the reactive watchers will resetting the conn to prevent
+    ;; the watchers from processing a massive tx-report.
+    (reactive/unwatch!)
+    (wrap-span-no-new-tx "ds/reset-conn"
+                         (common-db/reset-conn! db/dsdb new-db))
+    (when-not skip-health-check?
+      (wrap-span-no-new-tx "db/health-check"
+                           (common-db/health-check db/dsdb)))
+    (reactive/watch!)
+    (rf/dispatch [:success-reset-conn])))
 
 
 (rf/reg-fx
@@ -77,32 +77,33 @@
 (rf/reg-fx
   :editing/focus
   (fn [[uid index]]
-    (if (nil? uid)
-      (when-let [active-el (.-activeElement js/document)]
-        (.blur active-el))
-      (js/setTimeout (fn []
-                       (let [[uid embed-id]  (db/uid-and-embed-id uid)
-                             html-id         (str "editable-uid-" uid)
-                             ;; targets (js/document.querySelectorAll html-id)
-                             ;; n       (count (array-seq targets))
-                             el              (js/document.querySelector
-                                               (if embed-id
-                                                 (or
-                                                   ;; find exact embed block
-                                                   (str "textarea[id='" html-id "-embed-" embed-id "']")
-                                                   ;; find embedded that starts with current html id (embed id changed due to re-render)
-                                                   (str "textarea[id^='" html-id "-embed-']"))
-                                                 ;; take default
-                                                 (str "#" html-id)))]
-                         #_(cond
-                             (zero? n) (prn "No targets")
-                             (= 1 n) (prn "One target")
-                             (< 1 n) (prn "Several targets"))
-                         (when el
-                           (.focus el)
-                           (when index
-                             (setCursorPosition el index)))))
-                     100))))
+    ;; NOTE: Using 99999999999 is a hack, if the previous block has less character than mentioned then the default
+    ;;       caret position will be last position. Otherwise, we would have to calculate the no. of characters in the
+    ;;       block we are moving to, this calculation would be done on client side and, I am not sure if the calculation
+    ;;       would be correct because between calculation on client side and block data on server can change.]
+    (let [editing-index (if (= :end index)
+                          999999999
+                          index)]
+      (if (nil? uid)
+        (when-let [active-el (.-activeElement js/document)]
+          (.blur active-el))
+        (js/setTimeout (fn []
+                         (let [[uid embed-id]  (db/uid-and-embed-id uid)
+                               html-id         (str "editable-uid-" uid)
+                               el              (js/document.querySelector
+                                                 (if embed-id
+                                                   (or
+                                                     ;; find exact embed block
+                                                     (str "textarea[id='" html-id "-embed-" embed-id "']")
+                                                     ;; find embedded that starts with current html id (embed id changed due to re-render)
+                                                     (str "textarea[id^='" html-id "-embed-']"))
+                                                   ;; take default
+                                                   (str "#" html-id)))]
+                           (when el
+                             (.focus el)
+                             (when editing-index
+                               (setCursorPosition el editing-index)))))
+                       100)))))
 
 
 ;; todo(abhinav)
@@ -118,12 +119,6 @@
                        (set! (.-selectionStart target) start)
                        (set! (.-selectionEnd target) end)))
                    100)))
-
-
-(rf/reg-fx
-  :stylefy/tag
-  (fn [[tag properties]]
-    (stylefy/tag tag properties)))
 
 
 (rf/reg-fx
@@ -153,8 +148,8 @@
 
 
 (defn self-hosted-health-check
-  [url success-cb failure-cb]
-  (go (let [ch  (go (<p! (.. (js/fetch (str "http://" url "/health-check"))
+  [http-url success-cb failure-cb]
+  (go (let [ch  (go (<p! (.. (js/fetch (str http-url "/health-check"))
                              (then (fn [response]
                                      (if (.-ok response)
                                        :success
@@ -168,14 +163,14 @@
 
 (rf/reg-fx
   :remote/client-connect!
-  (fn [{:keys [url ws-url] :as remote-db}]
-    (log/debug ":remote/client-connect!" (pr-str (:url remote-db)))
+  (fn [{:keys [url http-url ws-url]}]
+    (log/debug ":remote/client-connect!" (pr-str url))
     (when @self-hosted-client
       (log/info ":remote/client-connect! already connected, restarting")
       (component/stop @self-hosted-client))
     (log/info ":remote/client-connect! health-check")
     (self-hosted-health-check
-      url
+      http-url
       (fn []
         (log/info ":remote/client-connect! health-check success")
         (log/info ":remote/client-connect! connecting")
@@ -184,7 +179,8 @@
                                        component/start)))
       (fn []
         (log/warn ":remote/client-connect! health-check failure")
-        (rf/dispatch [:remote/connection-failed])))))
+        (rf/dispatch [:remote/connection-failed])
+        (rf/dispatch [:stage/fail-db-load])))))
 
 
 (rf/reg-fx
@@ -203,7 +199,10 @@
       ;; valid event let's send it
       (do
         (log/debug "Sending event:" (pr-str event))
-        (client/send! event))
+        (let [ret (client/send! event)]
+          (when (= :rejected (:result ret))
+            (rf/dispatch [:remote/reject-forwarded-event event])
+            (log/warn "Tried to send invalid event. Error:" (pr-str (:reason ret))))))
       (let [explanation (-> schema/event
                             (m/explain event)
                             (me/humanize))]
@@ -213,4 +212,5 @@
 (rf/reg-fx
   :invoke-callback
   (fn [callback]
+    (log/debug "Invoking callback")
     (callback)))

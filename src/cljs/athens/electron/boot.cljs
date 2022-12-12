@@ -1,22 +1,36 @@
 (ns athens.electron.boot
   (:require
-    [athens.db :as db]
+    [athens.common.sentry      :refer-macros [wrap-span-no-new-tx]]
+    [athens.db                 :as db]
     [athens.electron.db-picker :as db-picker]
-    [athens.electron.utils :as utils]
-    [re-frame.core :as rf]))
+    [athens.electron.utils     :as utils]
+    [athens.router             :as router]
+    [athens.utils.sentry       :as sentry]
+    [re-frame.core             :as rf]))
 
 
 (rf/reg-event-fx
-  :boot/desktop
+  :boot
   [(rf/inject-cofx :local-storage :athens/persist)]
-  (fn [{:keys [local-storage]} _]
-    (let [init-app-db         (db/init-app-db local-storage)
+  (fn [{:keys [local-storage]} [_ first-boot?]]
+    (let [boot-tx             (sentry/transaction-start "boot-sequence")
+          param-db            (when-let [graph-params (router/consume-graph-params)]
+                                (apply utils/self-hosted-db graph-params))
+          init-app-db         (cond->
+                                ;; Init it from local storage.
+                                (wrap-span-no-new-tx "db/init-app-db" (db/init-app-db local-storage))
+                                ;; Select the db in id-param if there.
+                                param-db (db-picker/add-and-select param-db))
           all-dbs             (db-picker/all-dbs init-app-db)
           selected-db         (db-picker/selected-db init-app-db)
-          default-db          (utils/local-db (utils/default-base-dir))
+          default-db          (utils/get-default-db)
           selected-db-exists? (utils/db-exists? selected-db)
           default-db-exists?  (utils/db-exists? default-db)
           first-event         (cond
+                                ;; DB is in-memory, just create a new one.
+                                (utils/in-memory-db? selected-db)
+                                [:create-in-memory-conn]
+
                                 ;; DB is remote, attempt to connect to it.
                                 (utils/remote-db? selected-db)
                                 [:remote/connect! selected-db]
@@ -50,32 +64,51 @@
 
 
       ;; output => [:reset-conn] OR [:fs/create-and-watch]
-
       {:db         init-app-db
        :dispatch-n [[:theme/set]
                     [:loading/set]]
-       :async-flow {:first-dispatch first-event
+       :async-flow {:id             :boot-async-flow
+                    :db-path        [:async-flow :boot/desktop]
+                    :first-dispatch first-event
                     :rules          [;; if first time, go to Daily Pages and open left-sidebar
                                      {:when       :seen?
                                       :events     :fs/create-and-watch
-                                      :dispatch-n [[:navigate :home]
-                                                   [:left-sidebar/toggle]]}
+                                      :dispatch-n [[:left-sidebar/toggle]]}
 
-                                     ;; if nth time, remember dark/light theme and last page
+                                     ;; if nth time, remember dark/light theme
                                      {:when       :seen?
-                                      :events     :reset-conn
+                                      :events     :stage/success-db-load
                                       :dispatch-n [[:fs/update-write-db]
                                                    [:db/sync]
-                                                   [:restore-navigation]
-                                                   [:loading/unset]]
-                                      ;; This event ends the async flow successfully.
-                                      :halt?      true}
+                                                   ;; [:restore-navigation]  ; This functionality is there but unreliable we can use it once we make it reliable
+                                                   [:reset-undo-redo]
+                                                   ;; Only init the router after the db
+                                                   ;; is loaded, otherwise we can't check
+                                                   ;; if titles/uids in the URL exist.
+                                                   [:init-routes!]
+                                                   (when-not first-boot?
+                                                     ;; Go to home on graph change, but not
+                                                     ;; on the first boot.
+                                                     ;; We might have a permalink to follow
+                                                     ;; on first boot.
+                                                     [:navigate :home])
+                                                   [:posthog/set-super-properties]
+                                                   [:loading/unset]]}
+                                     {:when     :seen-all-of?
+                                      :events   [[:fs/update-write-db]
+                                                 [:db/sync]
+                                                 [:reset-undo-redo]
+                                                 [:posthog/set-super-properties]
+                                                 [:loading/unset]]
+                                      :dispatch [:sentry/end-tx boot-tx]
+                                      :halt?    true}
 
+                                     ;; halt when started connecting to remote
                                      {:when       :seen?
-                                      :events     :remote/connection-failed
-                                      :dispatch   [:db-picker/remove-selection]
-                                      ;; This event ends the async flow unsuccessfully
-                                      ;; and tries to reboot on a different db.
+                                      :events     [:stage/fail-db-load]
+                                      :dispatch-n [[:posthog/set-super-properties]
+                                                   [:loading/unset]
+                                                   [:sentry/end-tx boot-tx]]
                                       :halt?      true}
 
                                      ;; whether first or nth time, update athens pages

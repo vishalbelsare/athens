@@ -1,22 +1,22 @@
 (ns athens.util
   (:require
-    ["/textarea" :as getCaretCoordinates]
+    ["/theme/theme" :refer [theme]]
+    ["@chakra-ui/react" :refer [createStandaloneToast]]
+    ["textarea-caret" :as getCaretCoordinates]
     [athens.config :as config]
+    [athens.electron.utils :as electron.utils]
     [clojure.string :as string]
     [cognitect.transit :as tr]
     [com.rpl.specter :as s]
-    [goog.dom :refer [getElement setProperties]]
-    [posh.reagent :refer [#_pull]])
+    [goog.dom :refer [getElement setProperties]])
   (:require-macros
-    [com.rpl.specter :refer [recursive-path]]))
+    [com.rpl.specter :refer [recursive-path]])
+  (:import
+    (goog.events
+      KeyCodes)))
 
 
-;; Electron ipcMain Channels
-
-(def ipcMainChannels
-  {:toggle-max-or-min-win-channel "toggle-max-or-min-active-win"
-   :close-win-channel "close-win"
-   :exit-fullscreen-win-channel "exit-fullscreen-win"})
+(def toast (createStandaloneToast (clj->js {:theme theme})))
 
 
 ;; embed block
@@ -179,21 +179,6 @@
   (.. event -target -value))
 
 
-;; -- Regex -----------------------------------------------------------
-
-;; https://stackoverflow.com/a/11672480
-(def regex-esc-char-map
-  (let [esc-chars "()*&^%$#![]"]
-    (zipmap esc-chars
-            (map #(str "\\" %) esc-chars))))
-
-
-(defn escape-str
-  "Take a string and escape all regex special characters in it"
-  [str]
-  (string/escape str regex-esc-char-map))
-
-
 ;; -- specter --------------------------------------------------------
 
 
@@ -214,8 +199,8 @@
   (let [os (.. js/window -navigator -appVersion)]
     (cond
       (re-find #"Windows" os) :windows
-      (re-find #"Linux" os) :linux
-      (re-find #"Mac" os) :mac)))
+      (re-find #"Mac" os) :mac
+      :else :linux)))
 
 
 (defn is-mac?
@@ -228,7 +213,8 @@
    [(case os
       :windows "os-windows"
       :mac "os-mac"
-      :linux "os-linux")
+      :linux "os-linux"
+      "os-linux")
     (if electron? "is-electron" "is-web")
     (if theme-dark? "is-theme-dark" "is-theme-light")
     (when win-focused? "is-focused")
@@ -259,27 +245,40 @@
         (and (= os :linux) ctrl))))
 
 
+(defn navigate-key?
+  "Used to navigate between current and last page
+  Use meta for mac, alt for others."
+  [{:keys [key-code
+           meta
+           alt]}]
+  (let [os (get-os)]
+    (and (#{KeyCodes.LEFT KeyCodes.RIGHT} key-code)
+         (or (and (= os :mac) meta)
+             (and (= os :windows) alt)
+             (and (= os :linux) alt)))))
+
+
 ;; re-frame-10x
 
 (defn re-frame-10x-open?
   []
   (when config/debug?
     (let [el-10x (getElement "--re-frame-10x--")
-          display-10x (.. el-10x -style -display)]
+          display-10x (and el-10x (.. el-10x -style -display))]
       (not (= "none" display-10x)))))
 
 
 (defn open-10x
   []
   (when config/debug?
-    (let [el (js/document.querySelector "#--re-frame-10x--")]
+    (when-let [el (js/document.querySelector "#--re-frame-10x--")]
       (setProperties el (clj->js {"style" "display: block"})))))
 
 
 (defn hide-10x
   []
   (when config/debug?
-    (let [el (js/document.querySelector "#--re-frame-10x--")]
+    (when-let [el (js/document.querySelector "#--re-frame-10x--")]
       (setProperties el (clj->js {"style" "display: none"})))))
 
 
@@ -292,19 +291,13 @@
         (open-10x)))))
 
 
-(defn electron?
-  []
-  (let [user-agent (.. js/navigator -userAgent toLowerCase)]
-    (boolean (re-find #"electron" user-agent))))
-
-
 ;; (goog-define COMMIT_URL "")
 
 
 (defn athens-version
   []
   (cond
-    (electron?) (.. (js/require "electron") -remote -app getVersion)))
+    electron.utils/electron? (electron.utils/version)))
 
 
 ;; (not (string/blank? COMMIT_URL)) COMMIT_URL

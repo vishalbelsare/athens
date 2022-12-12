@@ -1,33 +1,34 @@
-{:paths ["src/clj" "src/cljs" "src/cljc" "src/js" "src/gen" "test"]
+{:paths ["src/clj" "src/cljs" "src/cljc" "src/js" "src/gen" "test" "resources"]
 
  :deps
- {org.clojure/clojure                   #:mvn{:version "1.10.3"}
-  org.clojure/clojurescript             #:mvn{:version "1.10.879"}
-  thheller/shadow-cljs                  #:mvn{:version "2.15.3"}
+ {org.clojure/clojure                   #:mvn{:version "1.11.1"}
+  org.clojure/clojurescript             #:mvn{:version "1.11.60"}
+  org.clojure/tools.cli                 #:mvn{:version "1.0.206"}
+  thheller/shadow-cljs                  #:mvn{:version "2.19.5"}
   reagent/reagent                       #:mvn{:version "1.0.0"}
   re-frame/re-frame                     #:mvn{:version "1.2.0"}
-  day8.re-frame/async-flow-fx           #:mvn{:version "0.2.0"}
+  day8.re-frame/async-flow-fx           #:mvn{:version "0.3.0"}
   day8.re-frame/test                    #:mvn{:version "0.1.5"}
-  datascript/datascript                 #:mvn{:version "1.1.0"}
+  datascript/datascript                 #:mvn{:version "1.3.10"}
   datascript-transit/datascript-transit #:mvn{:version "0.3.0"}
   denistakeda/posh                      #:mvn{:version "0.5.8"}
   cljs-http/cljs-http                   #:mvn{:version "0.1.46"}
   metosin/reitit                        #:mvn{:version "0.5.13"}
   metosin/komponentit                   #:mvn{:version "0.3.10"}
   instaparse/instaparse                 #:mvn{:version "1.4.10"}
-  borkdude/sci                          #:mvn{:version "0.2.5"}
-  garden/garden                         #:mvn{:version "1.3.10"}
-  stylefy/stylefy                       #:mvn{:version "3.0.0"}
-  stylefy/reagent                       #:mvn{:version "3.0.0"}
-  tick/tick                             #:mvn{:version "0.4.26-alpha"}
+  tick/tick                             #:mvn{:version "0.5.0-RC5"}
   cljc.java-time/cljc.java-time         #:mvn{:version "0.1.9"}
   com.rpl/specter                       #:mvn{:version "1.1.3"}
   com.taoensso/sente                    #:mvn{:version "1.16.2"}
-  binaryage/devtools                    #:mvn{:version "1.0.3"}
-  day8.re-frame/re-frame-10x            #:mvn{:version "1.1.13"}
+  binaryage/devtools                    #:mvn{:version "1.0.6"}
+  day8.re-frame/re-frame-10x            #:mvn{:version "1.5.0"}
   day8.re-frame/tracing                 #:mvn{:version "0.6.2"}
   org.flatland/ordered                  #:mvn{:version "1.15.10"}
-  io.github.nextjournal/clerk           #:mvn{:version "0.3.233"}
+  io.github.nextjournal/clerk           #:git{:sha "d111501576537c402dc8bf65eee30e2cd90d2666"}
+  io.homebase/datalog-console           #:mvn{:version "0.3.2"}
+  org.clojure/data.json                 #:mvn{:version "2.4.0"}
+  com.github.jpmonettas/flow-storm-inst #:mvn{:version "3.0.231"}
+  com.github.jpmonettas/flow-storm-dbg  #:mvn{:version "3.0.231"}
   ;; backend
   ;;   logging hell
   org.clojure/tools.logging             #:mvn{:version "1.1.0"}
@@ -41,6 +42,9 @@
   ;; web server
   http-kit/http-kit                     #:mvn{:version "2.5.3"}
   compojure/compojure                   #:mvn{:version "1.6.2"}
+  ring-basic-authentication/ring-basic-authentication #:mvn{:version "1.1.1"}
+  ring/ring-core                        #:mvn{:version "1.9.5"}
+  metosin/muuntaja                      #:mvn{:version "0.6.8"}
   ;; data validation
   metosin/malli                         #:mvn{:version "0.5.1"}
   ;; networked repl
@@ -49,7 +53,12 @@
   cider/cider-nrepl                     #:mvn{:version "0.27.2"}}
 
  :aliases
- {:carve
+ {:shadow-cljs
+  ;; Increase max JVM stack size.
+  ;; Without this, the node_modules/highlight.js/lib/languages/isbl.js file will randomly break the e2e CI job
+  ;; because the Google Closure Compiler can't parse it without busting the stack size.
+  {:jvm-opts ["-Xss4m"]}
+  :carve
   {:extra-deps {borkdude/carve
                 #:git{:url "https://github.com/borkdude/carve"
                       :sha "7d87e7fdf471121b4f3cc4b442e6ca39503ca07e"}}
@@ -64,8 +73,8 @@
   :clj-kondo
   {:extra-deps {borkdude/clj-kondo
                 #:git{:url "https://github.com/borkdude/clj-kondo"
-                      :sha "9bb69c3188f7efe6e17d392def89e89ec9d85ae5"
-                      :tag "v2021.08.06"}}
+                      :sha "8937af7f4372c0d2264735ebc1439d0b61030872"
+                      :tag "v2022.03.09"}}
    :main-opts  ["-m" "clj-kondo.main"]}
 
   :outdated
@@ -74,11 +83,34 @@
    ;; Very noisy, due to https://github.com/liquidz/antq/issues/108
    :main-opts  ["-m" "antq.core"]}
 
-  :build
-  {:deps {io.github.clojure/tools.build
-          #:git{:sha "599be6c8c94a6ac6cc02fc9b43536f9052225b60"
-                :tag "v0.5.1"}}
-   :ns-default build}
+  ;; How to use flowstorm:
+  ;; - yarn dev
+  ;; - open http://localhost:3000 for the web client
+  ;; - yarn client:debug
+  ;;   flowstorm UI will show up
+  ;; - add #trace before a defn form you want to debug
+  ;;   it will show in the flowstorm UI under the "flows" tab
+  ;;   press the forward and back buttons on it to trace execution values
+  ;;   more in https://jpmonettas.github.io/flow-storm-debugger/user_guide.html#_flows_tool
+  ;; - add #tap before a form you want to record the value
+  ;;   you'll see the return under the "taps" tab
+  ;;   more in https://jpmonettas.github.io/flow-storm-debugger/user_guide.html#_taps_tool
+  :flowstorm
+  {:exec-fn flow-storm.debugger.main/start-debugger
+   :exec-args {:port 8777
+               :repl-type :shadow
+               :build-id :app}}
+
+  :uberdeps
+  {:replace-deps {uberdeps/uberdeps {:mvn/version "1.1.1"}}
+   :replace-paths []
+   :main-opts ["-m" "uberdeps.uberjar"]}
+
+  :compiled-classes
+  {;; AOT compilation output, to be used with uberdeps.
+   ;; https://github.com/tonsky/uberdeps#creating-an-executable-jar
+   ;; https://clojure.org/guides/deps_and_cli#aot_compilation
+   :extra-paths ["classes"]}
 
   :test
   {:extra-paths ["dev/clj"]
@@ -96,6 +128,14 @@
   {:extra-paths ["dev/clj"]
    :main-opts   ["-m" "athens.self-hosted.core"]}
 
+  :athens-cli
+  {:extra-paths ["dev/clj"]
+   :main-opts   ["-m" "athens.self-hosted.save-load"]}
+
   :notebooks
   {:extra-paths ["dev/clj" "dev/notebooks"]
-   :main-opts   ["-m" "notebooks"]}}}
+   :main-opts   ["-m" "notebooks"]}
+
+  :notebooks-static
+  {:extra-paths ["dev/clj" "dev/notebooks"]
+   :exec-fn notebooks/build-static-app!}}}
